@@ -2,8 +2,6 @@
 
 (in-package #:cl-history)
 
-;;; "cl-history" goes here. Hacks and glory await!
-
 (defclass event ()
   ((timestamp :accessor timestamp :initform (local-time:now) :initarg :timestamp)
    (event-type :accessor event-type :initform :in :initarg :event-type)
