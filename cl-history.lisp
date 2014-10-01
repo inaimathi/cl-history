@@ -1,5 +1,3 @@
-;;;; cl-history.lisp
-
 (in-package #:cl-history)
 
 (defclass event ()
@@ -17,18 +15,22 @@
   (let ((part (data ev)))
     (case (event-type ev)
       (:in (tick whole part))
-      (:out (wind whole part))
-      (:batch (reduce 
-	       (lambda (memo pair)
-		 (destructuring-bind (old new) pair
-		   (tick (wind memo old) new)))
-	       part :initial-value whole)))))
+      (:out (wind whole part)))))
+
+(defmethod load-from (empty (storage stream))
+  (let ((res empty))
+    (handler-case
+	(loop 
+	   do (setf res (tick res (cl-store:restore storage)))
+	   do (read-byte storage))
+      (end-of-file () res))))
 
 (defmethod load-from (empty (fname pathname))
-  (let ((res empty))
-    (with-open-file (s fname :element-type '(unsigned-byte 8))
-      (handler-case
-	  (loop 
-	     do (setf res (tick res (cl-store:restore s)))
-	     do (read-byte s))
-	(end-of-file () res)))))
+  (with-open-file (s fname :element-type '(unsigned-byte 8))
+    (load-from empty s)))
+
+(defmethod new-event! (whole (ev event) (storage stream) &rest more-streams)
+  (loop for s in (cons storage more-streams)
+     do (cl-store:store ev s)
+     do (write-byte (char-code #\newline) s))
+  (apply-event whole ev))

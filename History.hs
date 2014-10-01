@@ -1,5 +1,7 @@
 module History where
 
+import System.IO
+
 data Event a = In a
              | Out a deriving (Eq, Read, Show)
 
@@ -11,13 +13,14 @@ applyEvent :: Archive a b -> a -> Event b -> a
 applyEvent arc a (In b) = (tick arc) a b
 applyEvent arc a (Out b) = (wind arc) a b
 
-loadFrom :: Read b => Archive a b -> FilePath -> IO a
-loadFrom arc fname = do evs <- fmap (map read) . fmap lines $ readFile fname
-                        return $ foldl (applyEvent arc) (empty arc) evs
+loadFrom :: Read b => Archive a b -> Handle -> IO a
+loadFrom arc handle = recur handle (empty arc)
+    where recur h acc = do res <- hIsEOF h
+                           if res
+                           then return acc
+                           else do ln <- hGetLine h
+                                   recur h . applyEvent arc acc $ read ln
 
-data Account = Account { balance :: Integer } deriving (Eq, Ord, Show)
-
-accArc :: Archive Account Integer
-accArc = Archive { tick = (\a t -> a { balance = balance a + t })
-                 , wind = (\a t -> a { balance = balance a - t })
-                 , empty = Account 0 }
+newEvent :: Show b => Archive a b -> a -> Event b -> [Handle] -> IO a
+newEvent arc a ev handles = do _ <- mapM_ (\h -> hPutStrLn h $ show ev) handles
+                               return $ applyEvent arc a ev
