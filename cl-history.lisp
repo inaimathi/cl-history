@@ -5,6 +5,16 @@
    (event-type :accessor event-type :initform :in :initarg :event-type)
    (data :accessor data :initform nil :initarg :data)))
 
+(defmethod opposite ((ev event))
+  (make-instance 
+   'event
+   :timestamp (timestamp ev) 
+   :data (data ev)
+   :event-type
+   (case (event-type ev)
+     (:in :out)
+     (:out :in))))
+
 (defgeneric tick (whole part)
   (:documentation "Should take a whole and a part. Should return the whole with the part added."))
 
@@ -16,6 +26,9 @@
     (case (event-type ev)
       (:in (tick whole part))
       (:out (wind whole part)))))
+
+(defmethod rewind-event (whole (ev event))
+  (apply-event whole (opposite ev)))
 
 (defmethod load-from (empty (storage stream))
   (let ((res empty))

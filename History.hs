@@ -5,6 +5,10 @@ import System.IO
 data Event a = In a
              | Out a deriving (Eq, Read, Show)
 
+opposite :: Event a -> Event a
+opposite (In a) = Out a
+opposite (Out a) = In a
+
 data Archive a b = Archive { tick :: (a -> b -> a)
                            , wind :: (a -> b -> a)
                            , empty :: a }
@@ -12,6 +16,9 @@ data Archive a b = Archive { tick :: (a -> b -> a)
 applyEvent :: Archive a b -> a -> Event b -> a
 applyEvent arc a (In b) = (tick arc) a b
 applyEvent arc a (Out b) = (wind arc) a b
+
+rewindEvent :: Archive a b -> a -> Event b -> a
+rewindEvent arc a = applyEvent arc a . opposite
 
 loadFrom :: Read b => Archive a b -> Handle -> IO a
 loadFrom arc handle = recur handle (empty arc)
