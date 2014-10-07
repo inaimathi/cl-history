@@ -27,8 +27,14 @@
       (:in (tick whole part))
       (:out (wind whole part)))))
 
+(defmethod apply-event (whole (evs list))
+  (mapcar (lambda (ev) (apply-event whole ev)) evs))
+
 (defmethod rewind-event (whole (ev event))
   (apply-event whole (opposite ev)))
+
+(defmethod rewind-event (whole (evs list))
+  (mapcar (lambda (ev) (rewind-event whole ev)) evs))
 
 (defmethod load-from (empty (storage stream))
   (let ((res empty))
@@ -47,3 +53,7 @@
      do (cl-store:store ev s)
      do (write-byte (char-code #\newline) s))
   (apply-event whole ev))
+
+(defmethod new-event! (whole (ev event) (file pathname) &rest more-streams)
+  (with-open-file (s file :direction :output :if-exists :append :if-does-not-exist :create :element-type '(unsigned-byte 8))
+    (apply #'new-event! (cons whole (cons ev (cons s more-streams))))))
