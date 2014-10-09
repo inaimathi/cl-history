@@ -1,16 +1,19 @@
 module History ( Event(..), Archive(..)
                , applyEvent, applyMany
                , readEvents, loadFrom, loadPartialFrom, loadFromFile
-               , newEvent, newEventToStreams, newEventToFile ) where
+               , newEvent
+               , fileWrite, streamsWrite ) where
 
 import System.IO
 import System.Time
 
 data Event a = Ev CalendarTime a deriving (Eq, Read, Show)
 
-data Archive a b = Archive { into :: (a -> b -> a), state :: a }
+data Archive a b = Archive { into :: (a -> b -> a)
+                           , write :: (Event b -> IO ())
+                           , state :: a }
 instance Show a => Show (Archive a b) where
-    show arc = "Archive { " ++ show (state arc) ++ " }"
+    show arc = concat ["Archive { ", show (state arc), " }"]
 
 applyEvent :: Archive a b -> Event b -> Archive a b
 applyEvent arc (Ev _ b) = arc { state = (into arc) (state arc) b }
@@ -30,16 +33,16 @@ loadFrom arc handle = fmap (applyMany arc) $ readEvents arc handle
 loadFromFile :: Read b => Archive a b -> FilePath -> IO (Archive a b)
 loadFromFile arc fname = fmap (applyMany arc . map read . lines) $ readFile fname
 
-newEvent :: Show b => Archive a b -> (Event b -> IO ()) -> b -> IO (Archive a b)
-newEvent arc fn b = do t <- getClockTime
-                       let ev = Ev (toUTCTime t) b
-                       do _ <- fn ev
-                          return $ applyEvent arc ev
+newEvent :: Show b => Archive a b -> b -> IO (Archive a b)
+newEvent arc b = do t <- getClockTime
+                    let ev = Ev (toUTCTime t) b
+                    do _ <- (write arc) ev
+                       return $ applyEvent arc ev
 
-newEventToStreams :: Show b => Archive a b -> [Handle] -> b -> IO (Archive a b)
-newEventToStreams arc handles = newEvent arc write
-    where write ev = mapM_ (\h -> hPutStrLn h $ show ev) handles
+streamsWrite :: Show b => [Handle] -> Event b -> IO ()
+streamsWrite handles event = mapM_ (\h -> hPutStrLn h ev) handles
+    where ev = show event
 
-newEventToFile :: Show b => Archive a b -> FilePath -> b -> IO (Archive a b)
-newEventToFile arc fname ev = withFile fname AppendMode newEv
-    where newEv handle = newEventToStreams arc [handle] ev
+fileWrite :: Show b => FilePath -> Event b -> IO ()
+fileWrite fname ev = withFile fname AppendMode newEv
+    where newEv handle = streamsWrite [handle] ev
