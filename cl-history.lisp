@@ -1,59 +1,90 @@
 (in-package #:cl-history)
 
+(defclass base-archive ()
+  ((cur-id :accessor cur-id :initform 0)
+   (zero :reader zero :initarg :zero)
+   (current :accessor current :initarg :current)
+   (file :reader file :initarg :file :initform nil)))
+
 (defclass event ()
-  ((timestamp :accessor timestamp :initform (local-time:now) :initarg :timestamp)
-   (event-type :accessor event-type :initform :in :initarg :event-type)
-   (data :accessor data :initform nil :initarg :data)))
+  ((id :reader id :initarg :id)
+   (timestamp :accessor timestamp :initform (local-time:now) :initarg :timestamp)
+   (payload :reader payload :initarg :payload)))
 
-(defmethod opposite ((ev event))
-  (make-instance 
-   'event
-   :timestamp (timestamp ev) 
-   :data (data ev)
-   :event-type
-   (case (event-type ev)
-     (:in :out)
-     (:out :in))))
+(defmethod current-id ((arc base-archive)) (cur-id arc))
 
-(defgeneric tick (whole part)
-  (:documentation "Should take a whole and a part. Should return the whole with the part added."))
+(defmethod insert! ((arc base-archive) data)
+  (let ((ev (make-instance 'event :id (incf (cur-id arc)) :payload data)))
+    (when (file arc)
+      (with-open-file (s (file arc) :direction :output :if-exists :append :if-does-not-exist :create :element-type '(unsigned-byte 8))
+	(cl-store:store ev s)
+	(write-byte (char-code #\newline) s)))
+    (insert-event! arc ev)))
 
-(defgeneric wind (whole part)
-  (:documentation "Should take a whole and a part. Should return the whole with the part removed."))
+(defmethod insert-event! ((arc base-archive) (ev event)) 
+  (setf (current arc) (apply-payload (current arc) (payload ev))
+	(cur-id arc) (max (cur-id arc) (id ev)))
+  nil)
 
-(defmethod apply-event (whole (ev event))
-  (let ((part (data ev)))
-    (case (event-type ev)
-      (:in (tick whole part))
-      (:out (wind whole part)))))
+(defmethod update! ((arc base-archive) (id integer) dat)
+  (let ((reconciled (loop with d = dat while d
+		       for ev in (events-since arc id)
+		       do (setf d (reconcile d (payload ev)))
+		       finally (return d))))
+    (when reconciled 
+      (insert! arc reconciled))))
 
-(defmethod apply-event (whole (evs list))
-  (mapcar (lambda (ev) (apply-event whole ev)) evs))
+(defmethod load-from! ((empty base-archive) (storage stream))
+  (handler-case 
+      (loop do (insert-event! empty (cl-store:restore storage))
+	 do (read-byte storage))
+    (end-of-file () empty)))
 
-(defmethod rewind-event (whole (ev event))
-  (apply-event whole (opposite ev)))
+(defmethod load-from! ((empty base-archive) (storage pathname))
+  (with-open-file (s storage :element-type '(unsigned-byte 8))
+    (load-from! empty s)))
 
-(defmethod rewind-event (whole (evs list))
-  (mapcar (lambda (ev) (rewind-event whole ev)) evs))
+(defmethod load-from! ((empty base-archive) (storage string))
+  (load-from! empty (pathname storage)))
 
-(defmethod load-from (empty (storage stream))
-  (let ((res empty))
-    (handler-case
-	(loop 
-	   do (setf res (tick res (cl-store:restore storage)))
-	   do (read-byte storage))
-      (end-of-file () res))))
+;;;;;;;;;; Standard Archive
+(defclass archive (base-archive)
+  ((events :accessor events :initform nil)))
 
-(defmethod load-from (empty (fname pathname))
-  (with-open-file (s fname :element-type '(unsigned-byte 8))
-    (load-from empty s)))
+(defun mk-archive (zero &key file)
+  (make-instance 'archive :zero zero :current zero :file file))
 
-(defmethod new-event! (whole (ev event) (storage stream) &rest more-streams)
-  (loop for s in (cons storage more-streams)
-     do (cl-store:store ev s)
-     do (write-byte (char-code #\newline) s))
-  (apply-event whole ev))
+(defmethod project ((arc archive) (id integer))
+  (if (= id (cur-id arc))
+      (current arc)
+      (reduce #'apply-payload (events arc) :from-end t :key #'payload :initial-value (zero arc))))
 
-(defmethod new-event! (whole (ev event) (file pathname) &rest more-streams)
-  (with-open-file (s file :direction :output :if-exists :append :if-does-not-exist :create :element-type '(unsigned-byte 8))
-    (apply #'new-event! (cons whole (cons ev (cons s more-streams))))))
+(defmethod events-since ((arc archive) (id integer))
+  (reverse
+   (loop for ev in (events arc)
+      while (> (id ev) id) 
+      collect ev)))
+
+(defmethod events-since ((arc archive) (ts local-time:timestamp))
+  (reverse
+   (loop for ev in (events arc) 
+      while (local-time:timestamp> (timestamp ev) ts)
+      collect ev)))
+
+(defmethod insert-event! ((arc archive) (ev event))
+  (push ev (events arc))
+  (setf (current arc) (apply-payload (current arc) (payload ev))
+	(cur-id arc) (max (cur-id arc) (id ev)))
+  nil)
+
+;;;;;;;;;; User-defined stuff
+(defgeneric reconcile (a b)
+  (:documentation "Define your own reconcilable method to use the update! archive method. 
+It needs to take two instances, `a` and `b`, of whatever data class you're using and return one of
+  - a copy of `a` ahat reflects any changes that should be applied if `b` happened after `a` was created, but before it was applied to an archive
+  - `a` (if no change is necessary as a result of `b` happening first)
+  - NIL (if `b` removes the need to apply `a` at all) ."))
+
+(defgeneric apply-payload (whole part)
+  (:documentation "Define your own apply-payload method to use any part of cl-history.
+It needs to take a `whole` (the complete object you're building up) and a `part` (the chunklet contained inside an individual event), and non-destructively apply `part` to `whole` (that is, it may return `whole` unaltered, if there was no consequence of `part`, but if any changes result from the application, it may not destructively modify `whole`)."))

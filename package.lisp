@@ -2,6 +2,10 @@
 
 (defpackage #:cl-history
   (:use #:cl)
-  (:export #:event #:tick #:wind #:apply-event
-	   #:load-from #:new-event!))
+  (:export #:current-id #:current #:zero #:insert! #:update! #:load-from!
+
+	   #:archive #:mk-archive #:project #:events #:events-since
+	   #:event #:id #:timestamp #:payload
+
+	   #:reconcile #:apply-payload))
 

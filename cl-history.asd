@@ -12,4 +12,3 @@
 	       #:cl-store)
   :components ((:file "package")
                (:file "cl-history")))
-
