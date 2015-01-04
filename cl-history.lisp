@@ -17,8 +17,7 @@
   (let ((ev (make-instance 'event :id (incf (cur-id arc)) :payload data)))
     (when (file arc)
       (with-open-file (s (file arc) :direction :output :if-exists :append :if-does-not-exist :create :element-type '(unsigned-byte 8))
-	(cl-store:store ev s)
-	(write-byte (char-code #\newline) s)))
+	(cl-store:store ev s)))
     (insert-event! arc ev)))
 
 (defmethod insert-event! ((arc base-archive) (ev event)) 
@@ -36,8 +35,7 @@
 
 (defmethod load-from! ((empty base-archive) (storage stream))
   (handler-case 
-      (loop do (insert-event! empty (cl-store:restore storage))
-	 do (read-byte storage))
+      (loop do (insert-event! empty (cl-store:restore storage)))
     (end-of-file () empty)))
 
 (defmethod load-from! ((empty base-archive) (storage pathname))
