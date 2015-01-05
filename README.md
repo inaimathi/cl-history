@@ -41,3 +41,9 @@ In general, these data structures are useful anywhere you can express a particul
 `events-since`
 
 `reconcile`
+
+### TODO
+
+- What we currently call `base-archive` should really be `archive`, and what we currently call `archive` should really be `in-memory-archive`. Alternatively, `base-archive` could be `disk-archive`, which would let us keep `archive` as is. In either case, you need a `mk-base-archive` (whatever it happens to be called in the end)
+- In order to duplicate the stuff we've got in `fact-base`, we'll also need a derivative of `archive` called `indexed-archive` with in-memory indices on parts of `payload`. No idea how we could define that; it might be simpler to keep this as an implementation-specific piece of functionality.
+- Think about implementing the `fact-base` style delta clustering. That is, `insert!` and `update!` apply things to an in-memory delta that only periodically gets written to disk. It's a slightly more complicated setup, but might be worth it in some situations. It may be worth implementing as a separate archive type (`clustering-archive` or something. the only worry I have about that is: what happens when we then want a `clustering`+`indexed` archive? Inheritance can take us so far, but something tells me pushing it too hard would end up biting me in the ass somewhere down the road. And actually, it should work fine for that particular use-case, because `clustering` and `indexed` don't overlap anywhere.)
