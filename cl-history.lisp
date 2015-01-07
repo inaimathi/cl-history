@@ -79,7 +79,7 @@
 (defgeneric reconcile (a b)
   (:documentation "Define your own reconcilable method to use the update! archive method. 
 It needs to take two instances, `a` and `b`, of whatever data class you're using and return one of
-  - a copy of `a` ahat reflects any changes that should be applied if `b` happened after `a` was created, but before it was applied to an archive
+  - a copy of `a` that reflects any changes that should be applied if `b` happened after `a` was created, but before it was applied to an archive
   - `a` (if no change is necessary as a result of `b` happening first)
   - NIL (if `b` removes the need to apply `a` at all) ."))
 
