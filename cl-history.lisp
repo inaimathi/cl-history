@@ -31,7 +31,8 @@
 		       do (setf d (reconcile d (payload ev)))
 		       finally (return d))))
     (when reconciled 
-      (insert! arc reconciled))))
+      (insert! arc reconciled)
+      reconciled)))
 
 (defmethod load-from! ((empty base-archive) (storage stream))
   (handler-case 
@@ -55,7 +56,7 @@
 (defmethod project ((arc archive) (id integer))
   (if (= id (cur-id arc))
       (current arc)
-      (reduce #'apply-payload (events arc) :from-end t :key #'payload :initial-value (zero arc))))
+      (reduce #'apply-payload (reverse (events arc)) :key #'payload :initial-value (zero arc))))
 
 (defmethod events-since ((arc archive) (id integer))
   (reverse
